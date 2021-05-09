@@ -45,6 +45,15 @@ function perform() {
             .map((v) => v.toISOString().slice(0, 10));
 
         const dat = (date, i) => groupedData[date] ? (groupedData[date][i] ? groupedData[date][i] : {}) : {}
+        const formatPrice = (data) => {
+            if (data.income) {
+                return `<span style="color:green;">${data.income}</span>`;
+            } else if (data.outcome) {
+                return `<span>${data.outcome}</span>`;
+            } else {
+                return "";
+            }
+        }
 
         const tableView = ce(`
             <div id="dv-table-view" class="dv-modal" style="display:none;">
@@ -58,27 +67,35 @@ function perform() {
                         </div>
                     </div>
                     <div class="dv-content">
-                        <table>
+                        <table class="dv-table">
                             <tr>
                                 <th>Date</th>
-                                <th colspan="4">Incomes</th>
-                                <th colspan="2">Second</th>
+                                <th colspan="4" class="dv-cat dv-cat-incomes">Incomes</th>
+                                <th colspan="4" class="dv-car dv-cat-mandatory">Mandatory</th>
+                                <th colspan="4" class="dv-car dv-cat-commons">Commons</th>
                             </tr>
             
                             ${datesRangeList.map(v => {
                                 return `
                                     <tr>
                                         <td>${v}</td>
-                                        <td>${dat(v, 0).outcome}</td>
-                                        <td>${dat(v, 1).outcome}</td>
-                                        <td>${dat(v, 2).outcome}</td>
-                                        <td>${dat(v, 3).outcome}</td>
-                                        <td>${dat(v, 4).outcome}</td>
-                                        <td>${dat(v, 5).outcome}</td>
+                                        <td>${formatPrice(dat(v, 0))}</td>
+                                        <td>${formatPrice(dat(v, 1))}</td>
+                                        <td>${formatPrice(dat(v, 2))}</td>
+                                        <td>${formatPrice(dat(v, 3))}</td>
+                                        <td>${formatPrice(dat(v, 4))}</td>
+                                        <td>${formatPrice(dat(v, 5))}</td>
+                                        <td>${formatPrice(dat(v, 6))}</td>
+                                        <td>${formatPrice(dat(v, 7))}</td>
+                                        <td>${formatPrice(dat(v, 8))}</td>
+                                        <td>${formatPrice(dat(v, 9))}</td>
+                                        <td>${formatPrice(dat(v, 10))}</td>
+                                        <td>${formatPrice(dat(v, 11))}</td>
+                                        <td>${formatPrice(dat(v, 12))}</td>
                                     </tr>
                                 `
                             })
-                            .join()
+                            .join("")
                             }
                         </table>
                     </div>
@@ -96,7 +113,32 @@ function perform() {
 (function () {
     'use strict';
 
+    // language=CSS
     GM_addStyle(`
+    .dv-cat {
+        text-align: left;
+        font-weight: bold;
+        white-space: nowrap;
+        vertical-align: bottom;
+        padding: 2px 3px 2px 3px;
+        font-size: 1.1vw;
+    }
+        
+    .dv-cat-incomes {
+        background-color: #d9d2e9;
+        color: #20124d;
+    }
+
+    .dv-cat-mandatory {
+        background-color: #ead1dc;
+        color: #4c1130;
+    }
+    
+    .dv-cat-commons {
+        background-color: #fce5cd;
+        color: #660000;
+    }
+        
     .dv-modal {
         font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", "Liberation Sans", sans-serif;
         position: fixed;
@@ -126,6 +168,10 @@ function perform() {
 
     .dv-nav-title > h1 {
         font-size: 1.5vw;
+    }
+    
+    .dv-table tr > td {
+        border: 1px solid black;
     }
 
     .btn {
@@ -205,32 +251,32 @@ function datesRange(start, end) {
 
 /**
  * @typedef CacheData
- * @property {number} account_income: 1770941
- * @property {number} account_outcome: 1770941
- * @property {number} category: 0
- * @property {string} changed: "2021-04-27 12:34:35.583742+03"
- * @property {string} comment: ""
- * @property {string} created: "2021-04-25 18:20:30"
- * @property {string} date: "2021-04-25"
- * @property {boolean} deleted: false
- * @property {number} direction: -1
- * @property {boolean} hold: false
- * @property {number} id: 388396609
- * @property {boolean} inbalance_income: true
- * @property {boolean} inbalance_outcome: true
- * @property {number} income: 0
- * @property {number} outcome: 18500
- * @property {number} instrument_income: 2
- * @property {number} instrument_outcome: 2
- * @property {Object} merchant: null
- * @property {string} payee: "Роман К."
- * @property {Object} price: null
- * @property {number} tag_group: 10539338
- * @property {number[]} tag_groups: Array [ 10539338 ]
- * @property {number} type: -1
- * @property {string} type_income: "ccard"
- * @property {string} type_outcome: "ccard"
- * @property {number} user: 398846
+ * @property {number} account_income
+ * @property {number} account_outcome
+ * @property {number} category
+ * @property {string} changed
+ * @property {string} comment
+ * @property {string} created
+ * @property {string} date
+ * @property {boolean} deleted
+ * @property {number} direction
+ * @property {boolean} hold
+ * @property {number} id
+ * @property {boolean} inbalance_income
+ * @property {boolean} inbalance_outcome
+ * @property {number} income
+ * @property {number} outcome
+ * @property {number} instrument_income
+ * @property {number} instrument_outcome
+ * @property {Object} merchant
+ * @property {string} payee
+ * @property {Object} price
+ * @property {number} tag_group
+ * @property {number[]} tag_groups
+ * @property {number} type
+ * @property {string} type_income
+ * @property {string} type_outcome
+ * @property {number} user
  */
 
 /**

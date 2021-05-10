@@ -8,6 +8,35 @@
 // @grant        GM_addStyle
 // ==/UserScript==
 
+class Category {
+
+    constructor(name, length, style, subCategories) {
+        /** @type {string} */
+        this.name = name;
+        /** @type {number} */
+        this.length = length;
+        /** @type {string} */
+        this.style = style;
+        /** @type {Category[]} */
+        this.subCategories = !!subCategories ? subCategories : [];
+    }
+
+    /**
+     *
+     * @returns {number}
+     */
+    get totalLength() {
+        if (!!this.length) {
+            return this.length;
+        } else {
+            return this.subCategories
+                .map(v => v.length)
+                .filter(v => v != null)
+                .reduce((acc, v) => acc + v);
+        }
+    }
+}
+
 function perform() {
     const buttons = ce(`
         <div>
@@ -54,6 +83,63 @@ function perform() {
                 return "";
             }
         }
+        const subcats = (cat) => cat.subCategories.length === 0 ? [new Category("", cat.length)] : cat.subCategories;
+
+        const cats = [
+            new Category(
+                "Incomes",
+                null,
+                "incomes",
+                [
+                    new Category("Salary", 2),
+                    new Category("Other", 2)
+                ]
+            ),
+            new Category(
+                "Mandatory",
+                2,
+                "mandatory"
+            ),
+            new Category(
+                "Commons",
+                5,
+                "commons"
+            ),
+            new Category(
+                "Leisure",
+                null,
+                "leisure",
+                [
+                    new Category("Food", 4),
+                    new Category("Other", 2)
+                ]
+            ),
+            new Category(
+                "House",
+                4,
+                "house"
+            ),
+            new Category(
+                "Car / Transport",
+                4,
+                "car-transport"
+            ),
+            new Category(
+                "Health",
+                4,
+                "health"
+            ),
+            new Category(
+                "Self Care",
+                4,
+                "self-care"
+            ),
+            new Category(
+                "Others",
+                8,
+                "others"
+            )
+        ];
 
         const tableView = ce(`
             <div id="dv-table-view" class="dv-modal" style="display:none;">
@@ -69,40 +155,32 @@ function perform() {
                     <div class="dv-content">
                         <table class="dv-table">
                             <tr>
-                                <th>Date</th>
-                                <th colspan="4" class="dv-cat dv-cat-incomes">Incomes</th>
-                                <th colspan="4" class="dv-car dv-cat-mandatory">Mandatory</th>
-                                <th colspan="4" class="dv-car dv-cat-commons">Commons</th>
+                                <td class="dv-cat" rowspan="2">Date</td>
+                                ${tags(cats, cat =>
+            `<td colspan="${cat.totalLength}" class="dv-cat dv-cat-${cat.style}">${cat.name}</td>`)}
                             </tr>
-            
-                            ${datesRangeList.map(v => {
-                                return `
-                                    <tr>
-                                        <td>${v}</td>
-                                        <td>${formatPrice(dat(v, 0))}</td>
-                                        <td>${formatPrice(dat(v, 1))}</td>
-                                        <td>${formatPrice(dat(v, 2))}</td>
-                                        <td>${formatPrice(dat(v, 3))}</td>
-                                        <td>${formatPrice(dat(v, 4))}</td>
-                                        <td>${formatPrice(dat(v, 5))}</td>
-                                        <td>${formatPrice(dat(v, 6))}</td>
-                                        <td>${formatPrice(dat(v, 7))}</td>
-                                        <td>${formatPrice(dat(v, 8))}</td>
-                                        <td>${formatPrice(dat(v, 9))}</td>
-                                        <td>${formatPrice(dat(v, 10))}</td>
-                                        <td>${formatPrice(dat(v, 11))}</td>
-                                        <td>${formatPrice(dat(v, 12))}</td>
-                                    </tr>
-                                `
-                            })
-                            .join("")
-                            }
+
+                            <tr>
+                                ${tags(cats, cat =>
+            tags(subcats(cat), subcat =>
+                `<td colspan="${subcat.length}" class="dv-sub-cat dv-cat-${cat.style}">${subcat.name}</td>`))}
+                            </tr>
+
+                            ${tags(datesRangeList, date =>
+            `
+                                <tr>
+                                    <td>${date}</td>
+                                    ${tags(cats, cat =>
+                tags(subcats(cat), subcat =>
+                    tags(repeat(subcat.length, `<td>${formatPrice(dat(date, 0))}</td>`), col =>
+                        `<td>${formatPrice(dat(col, 0))}</td>`)))}
+                                </tr>
+                                `)}
                         </table>
                     </div>
                 </div>
             </div>
     `);
-
 
         tableView.style.display = "initial";
 
@@ -115,15 +193,32 @@ function perform() {
 
     // language=CSS
     GM_addStyle(`
+    .dv-table {
+        border-collapse: collapse;
+        border-spacing: 0;
+        table-layout: fixed;
+        width: 100%;
+        background: white;
+    }
+
+    .dv-table tr > td {
+        border: 1px solid #efefef;
+    }
+
     .dv-cat {
         text-align: left;
         font-weight: bold;
         white-space: nowrap;
         vertical-align: bottom;
         padding: 2px 3px 2px 3px;
-        font-size: 1.1vw;
+        font-size: 10pt;
+        border: none;
     }
-        
+
+    .dv-sub-cat {
+        font-size: 8pt;
+    }
+
     .dv-cat-incomes {
         background-color: #d9d2e9;
         color: #20124d;
@@ -133,12 +228,42 @@ function perform() {
         background-color: #ead1dc;
         color: #4c1130;
     }
-    
+
     .dv-cat-commons {
         background-color: #fce5cd;
         color: #660000;
     }
-        
+
+    .dv-cat-leisure {
+        background-color: #fff2cc;
+        color: #783f04;
+    }
+
+    .dv-cat-house {
+        background-color: #d9ead3;
+        color: #274e13;
+    }
+
+    .dv-cat-car-transport {
+        background-color: #d0e0e3;
+        color: #0c343d;
+    }
+
+    .dv-cat-health {
+        background-color: #c9daf8;
+        color: #0c343d;
+    }
+
+    .dv-cat-self-care {
+        background-color: #cfe2f3;
+        color: #0c343d;
+    }
+
+    .dv-cat-others {
+        background-color: #efefef;
+        color: #000000;
+    }
+
     .dv-modal {
         font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", "Liberation Sans", sans-serif;
         position: fixed;
@@ -168,10 +293,6 @@ function perform() {
 
     .dv-nav-title > h1 {
         font-size: 1.5vw;
-    }
-    
-    .dv-table tr > td {
-        border: 1px solid black;
     }
 
     .btn {
@@ -216,11 +337,39 @@ function perform() {
 })();
 
 /**
+ * @template T
+ * @callback TagsCallback
+ * @param {T} item
+ * @return {string}
+ */
+
+/**
+ * @template T
+ * @param {T[]} items
+ * @param {TagsCallback} f
+ * @return {string}
+ */
+function tags(items, f) {
+    return items.map(f).join("")
+}
+
+/**
  *
  * @return {Transactions}
  */
 function transactions() {
     return zm.loader.page.transaction;
+}
+
+/**
+ *
+ * @template T
+ * @param {number} count
+ * @param {T} content
+ * @returns {T[]}
+ */
+function repeat(count, content) {
+    return Array.from(Array(count), () => content);
 }
 
 /**

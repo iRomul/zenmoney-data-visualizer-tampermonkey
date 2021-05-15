@@ -8,10 +8,6 @@
 // @grant        GM_addStyle
 // ==/UserScript==
 
-declare function GM_addStyle(css: string);
-
-declare const zm: { loader: { page: { transaction: ZMTransactions } } };
-
 class Category {
 
     name: string | null;
@@ -53,25 +49,23 @@ class Category {
 
 class DataStorage {
 
-    readonly groupedData: { [key: string]: ZMTransaction[] };
+    readonly groupedData: Map<string, Map<string, ZMTransaction[]>>;
 
-    constructor(data: {[p: number]: ZMCache}) {
+    constructor(data: { [p: number]: ZMCache }) {
         this.groupedData = Object.values(data)
             .map(v => v.data)
-            .reduce((r, a) => {
-                r[a.date] = [...r[a.date] || [], a];
-                return r;
-            }, {}) as { [key: string]: ZMTransaction[] };
+            .groupBy(v => v.date)
+            .mapValues((k, v) => {
+                return v.groupBy(v => ZM.resolveTag(v).title);
+            });
+
+        console.log(this.groupedData);
     }
 
     getAt(date: string, category: Category, subCategory: Category, i: number): ZMTransaction | null {
-        if(this.groupedData[date]) {
-            return (this.groupedData[date][i] ? this.groupedData[date][i] : null);
-        } else {
-            return null;
-        }
+        const categoryTitle = subCategory ? subCategory.name : category.name;
+        return this.groupedData?.[date]?.[categoryTitle]?.[i];
     }
-
 }
 
 const DV = {
@@ -105,11 +99,11 @@ function perform() {
     const loadBtn = document.getElementById("dv-load");
 
     loadBtn.addEventListener("click", () => {
-        transactions().load();
+        ZM.transactions.load();
     }, false);
 
     visBtn.addEventListener("click", () => {
-        const dataStorage = new DataStorage(transactions().cache);
+        const dataStorage = new DataStorage(ZM.transactions.cache);
 
         const dateRange = minMax(Object.keys(dataStorage.groupedData));
 
@@ -213,10 +207,13 @@ function perform() {
                                         {
                                             cats.flatMap(cat =>
                                                 cat.safeSubCategories.flatMap(subcat =>
-                                                    [...nts(subcat.length)].map(i =>
-                                                        <td>
-                                                            <DV.TransactionPrice transaction={dataStorage.getAt(date, cat, subcat, i)}/>
-                                                        </td>)
+                                                    [...nts(subcat.length)].map(i => {
+                                                        const operation = dataStorage.getAt(date, cat, subcat, i)
+
+                                                        return <td title={operation?.tag_group}>
+                                                            <DV.TransactionPrice transaction={operation}/>
+                                                        </td>
+                                                    })
                                                 ))
                                         }
                                     </tr>)
@@ -381,36 +378,150 @@ function perform() {
     }).observe(document, {childList: true, subtree: true});
 })();
 
-function minMax<T>(items: T[]): { min: T, max: T } {
-    const list = [...items].sort();
+/* Tampermonkey */
+declare function GM_addStyle(css: string);
 
-    const min = list[0];
-    const max = list[list.length - 1];
+/************************/
+/*      ZenMoney        */
+/************************/
+// Data manipulation
+class ZM {
 
-    return {min, max};
-}
+    static get transactions(): ZMTransactions {
+        return zm.loader.page.transaction;
+    }
 
-function transactions(): ZMTransactions {
-    return zm.loader.page.transaction;
-}
+    static resolveTag(operation: ZMTransaction): ZMTag | null {
+        const tagGroupId = operation.tag_group;
 
-function* nts(count: number): Generator<number> {
-    for (let i = 0; i < count; i++) {
-        yield i;
+        if (tagGroupId === null) {
+            return null;
+        }
+
+        const tagGroup = ZM.tagGroups[tagGroupId]
+
+        console.assert(!!tagGroup, tagGroupId);
+        console.assert(!!tagGroup.tag0, tagGroup);
+
+        let tag = ZM.tags[tagGroup.tag0];
+
+        console.assert(!!tag, tagGroup.tag0);
+
+        return tag;
+    }
+
+    static get tags() {
+        return zm.profile.tags;
+    }
+
+    static get tagGroups() {
+        return zm.profile.tag_groups;
     }
 }
 
-function datesRange(start: Date, end: Date): Date[] {
-    let arr = [];
-    let dt = new Date(start);
-    for (; dt <= end; dt.setDate(dt.getDate() + 1)) {
-        arr.push(new Date(dt));
+// ZenMoney Data Model Definitions
+declare const zm: {
+    profile: {
+        tags: {
+            [key: number]: ZMTag
+        },
+        tag_groups: {
+            [key: number]: ZMTagGroup
+        },
+        tagTree: {
+            [key: number]: ZMTagTree
+        }
+    },
+    loader: {
+        page: {
+            transaction: ZMTransactions
+        }
     }
-    return arr;
+};
+
+declare class ZMTagGroup {
+    id: number;
+    budget_income: boolean;
+    budget_outcome: boolean;
+    changed: string;
+    show_income: boolean;
+    show_outcome: boolean;
+    tag0: number;
+    tag1: number | null;
+    tag2: number | null;
 }
 
-/* DOM Manipulation */
+declare class ZMTag {
+    id: number;
+    autocreate_tag_group: boolean;
+    budget_income: boolean;
+    budget_outcome: boolean;
+    changed: string;
+    group: number;
+    icon: string;
+    lower: string;
+    mgroup: number;
+    parent: string;
+    pgroups: number[];
+    required: boolean;
+    show_income: boolean;
+    show_outcome: boolean;
+    title: string;
+}
+
+declare class ZMTagTree extends ZMTag {
+    childs: { [key: number]: ZMTag }
+}
+
+declare class ZMTransaction {
+    account_income: number;
+    account_outcome: number;
+    category: number;
+    changed: string;
+    comment: string;
+    created: string;
+    date: string;
+    deleted: boolean;
+    direction: number;
+    hold: boolean;
+    id: number;
+    inbalance_income: boolean;
+    inbalance_outcome: boolean;
+    income: number;
+    outcome: number;
+    instrument_income: number;
+    instrument_outcome: number;
+    merchant: Object;
+    payee: string;
+    price: Object;
+    tag_group: number;
+    tag_groups: number;
+    type: number;
+    type_income: string;
+    type_outcome: string;
+    user: number;
+}
+
+declare class ZMCache {
+    el: Node;
+    data: ZMTransaction;
+}
+
+declare class ZMTransactions {
+    cache: { [key: number]: ZMCache };
+    cacheOrder: number[];
+    limit: number
+    skip: number
+
+    load()
+}
+
+/************************/
+/*      Utilities       */
+/************************/
+// DOM Manipulation
 const JSX = {
+
     /**
      * The tag name and create an html together with the attributes
      *
@@ -420,12 +531,12 @@ const JSX = {
      * @return {HTMLElement|SVGElement} html node with attrs
      */
     createElements(tagName, attrs, children) {
-        const element = isSVG(tagName)
+        const element = JSX.isSVG(tagName)
             ? document.createElementNS('http://www.w3.org/2000/svg', tagName)
             : document.createElement(tagName)
 
         // one or multiple will be evaluated to append as string or HTMLElement
-        const fragment = createFragmentFrom(children)
+        const fragment = JSX.createFragmentFrom(children)
         element.appendChild(fragment)
 
         Object.keys(attrs || {}).forEach(prop => {
@@ -474,13 +585,13 @@ const JSX = {
 
         switch (result) {
             case 'FRAGMENT':
-                return createFragmentFrom(children)
+                return JSX.createFragmentFrom(children)
 
             // Portals are useful to render modals
             // allow render on a different element than the parent of the chain
             // and leave a comment instead
             case 'PORTAL':
-                bridge.target.appendChild(createFragmentFrom(children))
+                bridge.target.appendChild(JSX.createFragmentFrom(children))
                 return document.createComment('Portal Used')
             default:
                 return result
@@ -504,101 +615,92 @@ const JSX = {
         }
 
         return console.error(`jsx-render does not handle ${typeof element}`)
-    }
-}
+    },
 
-const Fragment = () => 'FRAGMENT'
-const portalCreator = node => {
-    function Portal() {
-        return 'PORTAL'
-    }
+    isSVG(element) {
+        const patt = new RegExp(`^${element}$`, 'i')
+        const SVGTags = ['path', 'svg', 'use', 'g']
 
-    Portal.target = document.body
+        return SVGTags.some(tag => patt.test(tag))
+    },
 
-    if (node && node.nodeType === Node.ELEMENT_NODE) {
-        Portal.target = node
-    }
+    createFragmentFrom(children) {
+        // fragments will help later to append multiple children to the initial node
+        const fragment = document.createDocumentFragment()
 
-    return Portal
-}
-
-function isSVG(element) {
-    const patt = new RegExp(`^${element}$`, 'i')
-    const SVGTags = ['path', 'svg', 'use', 'g']
-
-    return SVGTags.some(tag => patt.test(tag))
-}
-
-function createFragmentFrom(children) {
-    // fragments will help later to append multiple children to the initial node
-    const fragment = document.createDocumentFragment()
-
-    function processDOMNodes(child) {
-        if (
-            child instanceof HTMLElement ||
-            child instanceof SVGElement ||
-            child instanceof Comment ||
-            child instanceof DocumentFragment
-        ) {
-            fragment.appendChild(child)
-        } else if (typeof child === 'string' || typeof child === 'number') {
-            const textnode = document.createTextNode(child.toString())
-            fragment.appendChild(textnode)
-        } else if (child instanceof Array) {
-            child.forEach(processDOMNodes)
-        } else if (child === false || child === null) {
-            // expression evaluated as false e.g. {false && <Elem />}
-            // expression evaluated as false e.g. {null && <Elem />}
-        } else {
-            // later other things could not be HTMLElement nor strings
+        function processDOMNodes(child) {
+            if (
+                child instanceof HTMLElement ||
+                child instanceof SVGElement ||
+                child instanceof Comment ||
+                child instanceof DocumentFragment
+            ) {
+                fragment.appendChild(child)
+            } else if (typeof child === 'string' || typeof child === 'number') {
+                const textnode = document.createTextNode(child.toString())
+                fragment.appendChild(textnode)
+            } else if (child instanceof Array) {
+                child.forEach(processDOMNodes)
+            } else if (child === false || child === null) {
+                // expression evaluated as false e.g. {false && <Elem />}
+                // expression evaluated as false e.g. {null && <Elem />}
+            } else {
+                // later other things could not be HTMLElement nor strings
+            }
         }
+
+        children.forEach(processDOMNodes)
+
+        return fragment
+    }
+}
+
+// Useful stuff
+function minMax<T>(items: T[]): { min: T, max: T } {
+    const list = [...items].sort();
+
+    const min = list[0];
+    const max = list[list.length - 1];
+
+    return {min, max};
+}
+
+function* nts(count: number): Generator<number> {
+    for (let i = 0; i < count; i++) {
+        yield i;
+    }
+}
+
+function datesRange(start: Date, end: Date): Date[] {
+    let arr = [];
+    let dt = new Date(start);
+    for (; dt <= end; dt.setDate(dt.getDate() + 1)) {
+        arr.push(new Date(dt));
+    }
+    return arr;
+}
+
+interface Map<K, V> {
+    mapValues<T>(mapFn: (key: K, value: V) => T): Map<K, T>;
+}
+
+Map.prototype.mapValues = function (mapFn: (key, value) => any) {
+    const map = new Map();
+
+    for (let [key, value] of this.entries()) {
+        map.set(key, mapFn(key, value));
     }
 
-    children.forEach(processDOMNodes)
+    return map;
+};
 
-    return fragment
+interface Array<T> {
+    groupBy<K>(keyFn: (v: T) => K): Map<K, T[]>
 }
 
-/* ZenMoney Data Model Definitions */
-declare class ZMTransaction {
-    account_income: number;
-    account_outcome: number;
-    category: number;
-    changed: string;
-    comment: string;
-    created: string;
-    date: string;
-    deleted: boolean;
-    direction: number;
-    hold: boolean;
-    id: number;
-    inbalance_income: boolean;
-    inbalance_outcome: boolean;
-    income: number;
-    outcome: number;
-    instrument_income: number;
-    instrument_outcome: number;
-    merchant: Object;
-    payee: string;
-    price: Object;
-    tag_group: number;
-    tag_groups: number;
-    type: number;
-    type_income: string;
-    type_outcome: string;
-    user: number;
-}
-
-declare class ZMCache {
-    el: Node;
-    data: ZMTransaction;
-}
-
-declare class ZMTransactions {
-    cache: { [key: number]: ZMCache };
-    cacheOrder: number[];
-    limit: number
-    skip: number
-
-    load()
+Array.prototype.groupBy = function (keyFn): Map<any, any[]> {
+    return this.reduce((acc: Map<any, any[]>, it) => {
+        acc.set(keyFn(it), [...acc.get(keyFn(it)) || [], keyFn(it)]);
+        return acc;
+    }, new Map());
 }

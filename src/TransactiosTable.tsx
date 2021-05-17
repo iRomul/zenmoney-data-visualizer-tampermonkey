@@ -1,83 +1,87 @@
 import {nts} from "./utils";
 import {JSX} from "./jsx";
-import {Category} from "./Category";
 import {DataStorage} from "./DataStorage";
 import {ZMTransaction} from "./ZmModel";
+import {Formats} from "./monetary/Format";
+import {Monetary} from "./monetary/Monetary";
 
 export type TransactionsTableData = {
     datesList: string[],
-    categories: Category[]
     dataStorage: DataStorage
 };
 
 export const TX = {
     TransactionsTable(data: TransactionsTableData) {
-        const {datesList, categories: cats, dataStorage} = data;
+        const {datesList, dataStorage} = data;
 
-        return <div id="dv-table-view" class="dv-modal" style="display:none;">
-            <div class="dv-modal-inner">
-                <div class="dv-nav">
-                    <div class="dv-nav-title">
-                        <h1>Таблица расходов</h1>
-                    </div>
-                    <div class="dv-nav-buttons">
-                        <button class="btn btn-primary">Закрыть</button>
-                    </div>
-                </div>
-                <div class="dv-content">
-                    <table class="dv-table">
-                        <tr>
-                            <td class="dv-cat" rowspan="2">Date</td>
-                            {
-                                cats.map(cat =>
-                                    <td colspan={cat.totalLength} class={`dv-cat dv-cat-${cat.style}`}>
-                                        {cat.name || ""}
-                                    </td>)
-                            }
-                        </tr>
+        return <table class="dv-table">
+            <tr>
+                <td class="dv-cat" rowspan="2">Date</td>
+                {
+                    dataStorage.upperCategories.map(cat =>
+                        <td colspan={cat.cells} class={`dv-cat dv-cat-${cat.id}`}>
+                            {cat.name ?? ""}
+                        </td>)
+                }
+            </tr>
 
-                        <tr>
-                            {
-                                cats.flatMap(cat =>
-                                    cat.safeSubCategories.map(subcat =>
-                                        <td colspan={subcat.length} class={`dv-sub-cat dv-cat-${cat.style}`}>
-                                            {subcat.name || ""}
-                                        </td>)
-                                )
-                            }
-                        </tr>
+            <tr>
+                {
+                    dataStorage.loweCategories.map(cat =>
+                        <td colspan={cat.cells} class={`dv-sub-cat dv-cat-${cat.id}`}>
+                            {cat.name ?? ""}
+                        </td>)
+                }
+            </tr>
 
+            {
+                datesList.map(date =>
+                    <tr>
+                        <td class="dv-value">{date}</td>
                         {
-                            datesList.map(date =>
-                                <tr>
-                                    <td>{date}</td>
-                                    {
-                                        cats.flatMap(cat =>
-                                            cat.safeSubCategories.flatMap(subcat =>
-                                                [...nts(subcat.length)].map(i => {
-                                                    const operation = dataStorage.getAt(date, cat, subcat, i)
+                            dataStorage.loweCategories.flatMap(cat => {
+                                const transactions = dataStorage.findTransactionByDateAndCategory(date, cat);
+                                let operationsOverflow = false;
 
-                                                    return <td title={operation?.comment}>
-                                                        <TX.TransactionPrice transaction={operation}/>
-                                                    </td>
-                                                })
-                                            ))
+                                if (transactions && cat.cells < transactions.length) {
+                                    operationsOverflow = true;
+                                    console.warn(`Not enough space for operations (date: ${date}, cat: ${cat?.name})`);
+                                }
+
+                                return [...nts(cat.cells)].map(i => {
+                                    if (operationsOverflow && (transactions.length - 1) == i) {
+                                        return <td class="dv-value">...</td>
+                                    } else {
+                                        const transaction = transactions?.[i];
+
+                                        if (transaction) {
+                                            return <td class="dv-value"
+                                                       ev-click="showDetails"
+                                                       data-transaction-id={transaction.id}>
+                                                <TX.TransactionPrice transaction={transaction}/>
+                                            </td>;
+                                        } else {
+                                            return <td class="dv-value"/>;
+                                        }
                                     }
-                                </tr>)
+                                });
+                            })
                         }
-                    </table>
-                </div>
-            </div>
-        </div>
+                    </tr>)
+            }
+        </table>
     },
 
     TransactionPrice(data: { transaction: ZMTransaction }) {
         const transaction = data?.transaction;
+        const format = Formats.RUSSIAN;
 
         if (transaction?.income) {
-            return <span style="color:green;">{`${transaction.income}`}</span>;
+            const monetary = new Monetary(transaction?.income.toString());
+            return <span style="color:green;">{format(monetary)}</span>;
         } else if (transaction?.outcome) {
-            return <span>{`${transaction.outcome}`}</span>;
+            const monetary = new Monetary(transaction?.outcome.toString());
+            return <span>{format(monetary)}</span>;
         } else if (transaction) {
             throw new Error(`No income or outcome in data: ${data}`);
         } else {

@@ -1,5 +1,3 @@
-import {Category} from "./Category";
-
 export declare class ZMTagGroup {
     id: number;
     budget_income: boolean;

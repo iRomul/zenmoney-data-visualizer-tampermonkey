@@ -1,31 +1,25 @@
-import {datesRange, minMax, nts} from "./utils";
+import {datesRange, minMax} from "./utils";
 import {JSX} from "./jsx";
-import {Category} from "./Category";
 import {TX} from "./TransactiosTable";
 import {DataStorage} from "./DataStorage";
 import {ZM} from "./ZmData";
 
-const DV = {
-    ControlButtons() {
-        return <div>
-            <button id="dv-vis" class="btn btn-secondary">Визуализировать</button>
-            <button id="dv-load" class="btn btn-secondary">Загрузить ещё</button>
-        </div>
-    }
-}
-
 function perform() {
-    document.querySelector(".transactionForm")
-        .after(<DV.ControlButtons/>);
+    document.querySelector(".transactionForm").after(
+        <div>
+            <button class="btn btn-secondary" ev-click="visualize">Визуализировать</button>
+        </div>
+    );
+    // const loadBtn = document.getElementById("dv-load");
+    const rootDiv = <div id="dv-plugin-root"/>
 
-    const visBtn = document.getElementById("dv-vis");
-    const loadBtn = document.getElementById("dv-load");
+    document.body.appendChild(rootDiv);
 
-    loadBtn.addEventListener("click", () => {
-        ZM.transactions.load();
-    }, false);
+    // loadBtn.addEventListener("click", () => {
+    //     ZM.transactions.load();
+    // }, false);
 
-    visBtn.addEventListener("click", () => {
+    JSX.addEventListener("visualize", () => {
         const dataStorage = new DataStorage(ZM.transactions.cache);
 
         const dateRange = minMax(dataStorage.groupedData.keys());
@@ -33,71 +27,73 @@ function perform() {
         const datesRangeList = datesRange(new Date(dateRange.min), new Date(dateRange.max))
             .map((v) => v.toISOString().slice(0, 10));
 
-        const cats = [
-            new Category(
-                "Incomes",
-                null,
-                "incomes",
-                [
-                    new Category("Salary", 2),
-                    new Category("Other", 2)
-                ]
-            ),
-            new Category(
-                "Mandatory",
-                2,
-                "mandatory"
-            ),
-            new Category(
-                "Commons",
-                5,
-                "commons"
-            ),
-            new Category(
-                "Leisure",
-                null,
-                "leisure",
-                [
-                    new Category("Food", 4),
-                    new Category("Other", 2)
-                ]
-            ),
-            new Category(
-                "House",
-                4,
-                "house"
-            ),
-            new Category(
-                "Car / Transport",
-                4,
-                "car-transport"
-            ),
-            new Category(
-                "Health",
-                4,
-                "health"
-            ),
-            new Category(
-                "Self Care",
-                4,
-                "self-care"
-            ),
-            new Category(
-                "Others",
-                8,
-                "others"
+        rootDiv.appendChild(
+            <div class="dv-dialog-fullscreen">
+                <div class="dv-dialog modal-dialog-scrollable">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title">Таблица расходов</h5>
+                            <button type="button" class="btn-close" ev-click="txTableClose"/>
+                        </div>
+                        <div class="modal-body">
+                            <TX.TransactionsTable
+                                datesList={datesRangeList}
+                                dataStorage={dataStorage}/>
+                        </div>
+                        <div class="modal-footer">
+
+                        </div>
+                    </div>
+                </div>
+            </div> as Node
+        );
+
+        JSX.addEventListener("txTableClose", () => {
+            while (rootDiv.firstChild) {
+                rootDiv.firstChild.remove();
+            }
+        });
+
+        JSX.addEventListener("showDetails", ev => {
+            const target = ev.currentTarget as HTMLElement;
+
+            const txId = target.dataset["transactionId"];
+            const tx = dataStorage.findTransactionById(txId);
+
+            const footer = document.getElementsByClassName("modal-footer")[0];
+
+            while (footer.firstChild) {
+                footer.firstChild.remove();
+            }
+
+            const formatDate = (date: string) =>
+                new Date(date).toLocaleString("ru-RU", {day: "2-digit", month: "short"})
+            const formatDay = (date: string) =>
+                new Date(date).toLocaleString("ru-RU", {weekday: "long"})
+
+            footer.appendChild(
+                <div style="display:flex;flex-direction:row;">
+                    <div style="padding:0 30px;">
+                        <div>{formatDate(tx?.date)}</div>
+                        <div>{formatDay(tx?.date)}</div>
+                    </div>
+                    <div style="padding:0 30px;">
+                        <div>
+                            <b>{ZM.resolveTag(tx)?.title ?? <i>Без категории</i>}</b>
+                            &nbsp;&mdash;&nbsp;{tx?.payee ?? <i>Не указан</i>}
+                            <span/>
+                        </div>
+                        <div style="color:#999999;">
+                            {tx?.comment ?? <i>...</i>}
+                        </div>
+                    </div>
+                    <div style="padding:0 30px;">
+                        <TX.TransactionPrice transaction={tx}/>
+                    </div>
+                </div>
             )
-        ];
-
-        const tableView = <TX.TransactionsTable
-            datesList={datesRangeList}
-            categories={cats}
-            dataStorage={dataStorage}/>
-
-        tableView.style.display = "initial";
-
-        document.body.appendChild(tableView);
-    }, false);
+        });
+    });
 }
 
 (function () {
@@ -105,15 +101,103 @@ function perform() {
 
     // language=CSS
     GM_addStyle(`
+        .dv-dialog-fullscreen {
+            font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans",
+            "Liberation Sans", sans-serif;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1000;
+        }
+
+        .dv-dialog {
+            padding: 1rem;
+        }
+
+        .modal-dialog-scrollable {
+            height: calc(100% - 2rem);
+        }
+
+        .modal-content {
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            width: 100%;
+            backdrop-filter: blur(5px);
+            background-color: rgba(255, 255, 255, 0.5);
+            background-clip: padding-box;
+            border: 1px solid rgba(0, 0, 0, .2);
+            border-radius: .3rem;
+            outline: 0;
+        }
+
+        .modal-dialog-scrollable .modal-content {
+            max-height: 100%;
+            overflow: hidden;
+        }
+
+        .modal-header {
+            display: flex;
+            flex-shrink: 0;
+            align-items: center;
+            justify-content: space-between;
+            padding: 1rem 1rem;
+            border-bottom: 1px solid #dee2e6;
+            border-top-left-radius: calc(.3rem - 1px);
+            border-top-right-radius: calc(.3rem - 1px);
+        }
+
+        .modal-footer {
+            display: flex;
+            flex-wrap: wrap;
+            flex-shrink: 0;
+            align-items: center;
+            justify-content: flex-end;
+            padding: .75rem;
+            border-top: 1px solid #dee2e6;
+            border-bottom-right-radius: calc(.3rem - 1px);
+            border-bottom-left-radius: calc(.3rem - 1px);
+        }
+
+        .modal-title {
+            margin-bottom: 0;
+            line-height: 1.5;
+        }
+
+        h5.modal-title {
+            font-size: 1.25rem;
+            margin-top: 0;
+            font-weight: 500;
+        }
+
+        .modal-body {
+            position: relative;
+            flex: 1 1 auto;
+            padding: 1rem;
+        }
+
+        .modal-dialog-scrollable .modal-body {
+            overflow-y: auto;
+        }
+
         .dv-table {
             border-collapse: collapse;
             border-spacing: 0;
             table-layout: fixed;
             width: 100%;
             background: white;
+            min-width: 2500px;
         }
 
-        .dv-table tr > td {
+        .dv-table td {
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            overflow: hidden;
+        }
+
+        .dv-value {
             border: 1px solid #efefef;
         }
 
@@ -123,15 +207,17 @@ function perform() {
             white-space: nowrap;
             vertical-align: bottom;
             padding: 2px 3px 2px 3px;
-            font-size: 10pt;
-            border: none;
+            font-size: 14pt;
+            height: 35px;
         }
 
         .dv-sub-cat {
             font-size: 8pt;
+            height: 20px;
+            vertical-align: bottom;
         }
 
-        .dv-cat-incomes {
+        .dv-cat-incomes, .dv-cat-incomes-salary, .dv-cat-incomes-others {
             background-color: #d9d2e9;
             color: #20124d;
         }
@@ -146,7 +232,7 @@ function perform() {
             color: #660000;
         }
 
-        .dv-cat-leisure {
+        .dv-cat-leisure, .dv-cat-leisure-food, .dv-cat-leisure-others {
             background-color: #fff2cc;
             color: #783f04;
         }
@@ -176,35 +262,17 @@ function perform() {
             color: #000000;
         }
 
-        .dv-modal {
-            font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", "Liberation Sans", sans-serif;
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            backdrop-filter: blur(9px);
-            z-index: 1000;
-            overflow: hidden;
-            outline: 0;
-        }
-
-        .dv-modal-inner {
-            display: flex;
-            margin: 25px;
-            flex-direction: column;
-        }
-
-        .dv-nav {
-            display: flex;
-        }
-
-        .dv-nav-title {
-            flex-grow: 1;
-        }
-
-        .dv-nav-title > h1 {
-            font-size: 1.5vw;
+        .btn-close {
+            box-sizing: content-box;
+            width: 1em;
+            height: 1em;
+            padding: .25em .25em;
+            color: #000;
+            background: transparent url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='%23000'%3e%3cpath d='M.293.293a1 1 0 011.414 0L8 6.586 14.293.293a1 1 0 111.414 1.414L9.414 8l6.293 6.293a1 1 0 01-1.414 1.414L8 9.414l-6.293 6.293a1 1 0 01-1.414-1.414L6.586 8 .293 1.707a1 1 0 010-1.414z'/%3e%3c/svg%3e") center/1em auto no-repeat;
+            border: 0;
+            border-radius: .25rem;
+            opacity: .5;
+            cursor: pointer;
         }
 
         .btn {

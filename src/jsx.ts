@@ -1,4 +1,14 @@
+const events: { [key: string]: ((ev: Event) => void)[] } = {};
+
 export const JSX = {
+
+    addEventListener(event: string, fn: (ev: Event) => void) {
+        if (!events[event]) {
+            events[event] = [];
+        }
+
+        events[event].push(fn);
+    },
 
     /**
      * The tag name and create an html together with the attributes
@@ -34,6 +44,15 @@ export const JSX = {
             } else if (prop === 'dangerouslySetInnerHTML') {
                 // eslint-disable-next-line no-underscore-dangle
                 element.innerHTML = attrs[prop].__html
+            } else if (prop.startsWith("ev-")) {
+                const evName = prop.substring(3);
+                const evFnName = attrs[prop];
+
+                element.addEventListener(evName, (ev) => {
+                    if (events[evFnName]) {
+                        events[evFnName].forEach(f => f(ev));
+                    }
+                }, false);
             } else {
                 // any other prop will be set as attribute
                 element.setAttribute(prop, attrs[prop])
